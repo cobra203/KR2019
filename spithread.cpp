@@ -23,7 +23,10 @@ SpiThread::SpiThread() : semaphore(1)
 
 SpiThread::~SpiThread()
 {
-
+    VOCAL_SYS_STATUS_S sys_status;
+    QVariant DataVar;
+    DataVar.setValue(sys_status);
+    qRegisterMetaType<QVariant>("QVariant"); //写在构造函数里
 }
 
 void SpiThread::stop()
@@ -38,6 +41,7 @@ void SpiThread::run()
     int     result      = 0;
     VOCAL_SYS_STATUS_S sys_status = {0};
     QTime time;
+    QVariant var1;
 
     while(!stopped) {
         if(!STATUS_CHECK(THR_STA_MCP_FOUND)) {
@@ -76,19 +80,15 @@ void SpiThread::run()
             STATUS_CLR(THR_STA_MCP_OPEN);
             STATUS_CLR(THR_STA_MCP_FOUND);
         }
-        else if(sys_status.Vol_Updata) {
-            int i = 0;
-            for(i = 0; i < MIC_MAX_NUM; i++) {
-                if(sys_status.Mic_Info[i].device_id) {
-                    semaphore.acquire();
-                    emit vocal_cmd(i+1, sys_status.Mic_Info[i].volume);
-                }
-            }
-            qDebug("%d ms", time.elapsed());
-            sys_status.Vol_Updata = 0;
-        }
+        else if(sys_status.Status_Updata) {
+            var1.setValue(sys_status);
 
-        //QThread::currentThread()->msleep(20);
+            semaphore.acquire();
+            emit vocal_updata(var1);
+
+            qDebug("%d ms", time.elapsed());
+            sys_status.Status_Updata = 0;
+        }
     }
     if(STATUS_CHECK(THR_STA_MCP_OPEN)) {
         Try_To_close_Net();

@@ -30,12 +30,14 @@ public:
 
 private slots:
     void showPrin(const QString&);
-    void Vocal_Mic_Sig(int id, int volume);
+    void vocal_updata_resp(QVariant);
 
 private:
     Ui::Dialog *ui;
     SpiThread   spiDaemon;
     QMutex mutex;
+    void vocal_mic_enable(int id, bool enable);
+    void vocal_mic_volume(int id, bool mute, int volume);
 };
 
 #endif // DIALOG_H

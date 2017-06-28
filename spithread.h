@@ -4,6 +4,9 @@
 #include <QThread>
 #include <QSemaphore>
 #include "mcp2210.h"
+#include <QVariant>
+
+Q_DECLARE_METATYPE(VOCAL_SYS_STATUS_S)
 
 class SpiThread : public QThread
 {
@@ -15,7 +18,7 @@ public:
 
 signals:
     void prin(const QString &);
-    void vocal_cmd(int, int);
+    void vocal_updata(QVariant);
 
 protected:
     void run();

@@ -355,6 +355,8 @@ static int CheckEndian(void)
 #define Swap16(x) (CheckEndian() ? (x) : _SWAP16(x))
 #define Swap32(x) (CheckEndian() ? (x) : _SWAP32(x))
 
+EHIF_STATUS_S g_ehif_status = {0};
+
 static int _basic_operation(EHIF_MAGIC_NAM_E magic,
                         uint16_t cmd, uint16_t *len, void *data, EHIF_STATUS_S *status)
 {
@@ -488,10 +490,8 @@ typedef struct rc_get_data_s
 
 static int ehif_DI_GET_DEVICE_INFO(CC85XX_DEV_INFO_S *dev_info)
 {
-    EHIF_STATUS_S   status = {0};
-
-    RES_ASSERT(basic_CMD_REQ(CMD_DI_GET_DEVICE_INFO, 0, NULL, &status));
-    RES_ASSERT(basic_READ(sizeof(CC85XX_DEV_INFO_S), (uint8_t *)dev_info, &status));
+    RES_ASSERT(basic_CMD_REQ(CMD_DI_GET_DEVICE_INFO, 0, NULL, &g_ehif_status));
+    RES_ASSERT(basic_READ(sizeof(CC85XX_DEV_INFO_S), (uint8_t *)dev_info, &g_ehif_status));
 
     dev_info->device_id = Swap32(dev_info->device_id);
     dev_info->manf_id   = Swap32(dev_info->manf_id);
@@ -502,19 +502,15 @@ static int ehif_DI_GET_DEVICE_INFO(CC85XX_DEV_INFO_S *dev_info)
 
 static int ehif_EHC_EVT_CLR(uint8_t val)
 {
-    EHIF_STATUS_S   status = {0};
-
-    RES_ASSERT(basic_CMD_REQ(CMD_EHC_EVT_CLR, sizeof(uint8_t), &val, &status));
+    RES_ASSERT(basic_CMD_REQ(CMD_EHC_EVT_CLR, sizeof(uint8_t), &val, &g_ehif_status));
 
     return E_SUCCESS;
 }
 
 static int ehif_NVS_GET_DATA(uint8_t slot, void *data)
 {
-    EHIF_STATUS_S   status = {0};
-
-    RES_ASSERT(basic_CMD_REQ(CMD_NVS_GET_DATA, sizeof(uint8_t), &slot, &status));
-    RES_ASSERT(basic_READ(sizeof(uint32_t), data, &status));
+    RES_ASSERT(basic_CMD_REQ(CMD_NVS_GET_DATA, sizeof(uint8_t), &slot, &g_ehif_status));
+    RES_ASSERT(basic_READ(sizeof(uint32_t), data, &g_ehif_status));
 
     //*(uint32_t *)nwm_id = Swap32(*(uint32_t *)nwm_id);
 
@@ -524,23 +520,21 @@ static int ehif_NVS_GET_DATA(uint8_t slot, void *data)
 static int ehif_NVS_SET_DATA(uint8_t slot, uint32_t data)
 {
     uint8_t         set_data[5] = {slot};
-    EHIF_STATUS_S   status = {0};
     //uint32_t        tmp = Swap32(data);
 
     memcpy(&set_data[1], &data, sizeof(uint32_t));
 
-    RES_ASSERT(basic_CMD_REQ(CMD_NVS_SET_DATA, sizeof(set_data), set_data, &status));
+    RES_ASSERT(basic_CMD_REQ(CMD_NVS_SET_DATA, sizeof(set_data), set_data, &g_ehif_status));
 
     return E_SUCCESS;
 }
 
 static int ehif_IO_GET_PIN_VAL(uint16_t *gpio_val)
 {
-    EHIF_STATUS_S   status = {0};
     uint8_t         recvbuf[4] = {0};
 
-    RES_ASSERT(basic_CMD_REQ(CMD_IO_GET_PIN_VAL, 0, NULL, &status));
-    RES_ASSERT(basic_READ(sizeof(recvbuf), recvbuf, &status));
+    RES_ASSERT(basic_CMD_REQ(CMD_IO_GET_PIN_VAL, 0, NULL, &g_ehif_status));
+    RES_ASSERT(basic_READ(sizeof(recvbuf), recvbuf, &g_ehif_status));
 
     memcpy(gpio_val, &recvbuf[2], sizeof(uint16_t));
     *gpio_val = Swap16(*gpio_val);
@@ -551,50 +545,43 @@ static int ehif_IO_GET_PIN_VAL(uint16_t *gpio_val)
 static int ehif_NWM_CONTROL_ENABLE(uint8_t enable)
 {
     uint8_t         sendbuf[2] = {0, enable};
-    EHIF_STATUS_S   status = {0};
 
-    RES_ASSERT(basic_CMD_REQ(CMD_NVM_CONTROL_ENABLE, sizeof(sendbuf), sendbuf, &status));
+    RES_ASSERT(basic_CMD_REQ(CMD_NVM_CONTROL_ENABLE, sizeof(sendbuf), sendbuf, &g_ehif_status));
 
     return E_SUCCESS;
 }
 
-static int ehif_NWM_CONTROL_SIGNAL(void)
+static int ehif_NWM_CONTROL_SIGNAL(uint8_t enable)
 {
-    uint8_t         sendbuf[2] = {0, 1};
-    EHIF_STATUS_S   status = {0};
+    uint8_t         sendbuf[2] = {0, enable};
 
-    RES_ASSERT(basic_CMD_REQ(CMD_NVM_CONTROL_SIGNAL, sizeof(sendbuf), sendbuf, &status));
+    RES_ASSERT(basic_CMD_REQ(CMD_NVM_CONTROL_SIGNAL, sizeof(sendbuf), sendbuf, &g_ehif_status));
 
     return E_SUCCESS;
 }
 
 static int ehif_CMD_NVM_GET_STATUS(CC85XX_NWM_GET_STATUS_S *nwm_status)
 {
-    EHIF_STATUS_S   status = {0};
-
-    RES_ASSERT(basic_CMD_REQ(CMD_NVM_GET_STATUS, 0, NULL, &status));
-    RES_ASSERT(basic_READ(sizeof(CC85XX_NWM_GET_STATUS_S), nwm_status, &status));
+    RES_ASSERT(basic_CMD_REQ(CMD_NVM_GET_STATUS, 0, NULL, &g_ehif_status));
+    RES_ASSERT(basic_READ(sizeof(CC85XX_NWM_GET_STATUS_S), nwm_status, &g_ehif_status));
 
     return E_SUCCESS;
 }
 
 static int ehif_VC_SET_VOLUME(CC85XX_SET_VOLUME_S *set_volume)
 {
-    EHIF_STATUS_S   status = {0};
     void            *pdata = (void *)set_volume;
 
     set_volume->volume = Swap16(set_volume->volume);
-    RES_ASSERT(basic_CMD_REQ(CMD_VC_SET_VOLUME, sizeof(CC85XX_SET_VOLUME_S), pdata, &status));
+    RES_ASSERT(basic_CMD_REQ(CMD_VC_SET_VOLUME, sizeof(CC85XX_SET_VOLUME_S), pdata, &g_ehif_status));
 
     return E_SUCCESS;
 }
 
 static int ehif_VC_GET_VOLUME(CC85XX_GET_VOLUME_S *get_volume, uint16_t *volume)
 {
-    EHIF_STATUS_S   status = {0};
-
-    RES_ASSERT(basic_CMD_REQ(CMD_VC_GET_VOLUME, 1, get_volume, &status));
-    RES_ASSERT(basic_READ(sizeof(uint16_t), volume, &status));
+    RES_ASSERT(basic_CMD_REQ(CMD_VC_GET_VOLUME, 1, get_volume, &g_ehif_status));
+    RES_ASSERT(basic_READ(sizeof(uint16_t), volume, &g_ehif_status));
 
     *volume = Swap16(*volume);
 
@@ -604,10 +591,9 @@ static int ehif_VC_GET_VOLUME(CC85XX_GET_VOLUME_S *get_volume, uint16_t *volume)
 static int ehif_RC_GET_DATA(uint8_t slot, uint8_t *data, uint8_t *count)
 {
     RC_GET_DATA_S   get_data    = {0};
-    EHIF_STATUS_S   status      = {0};
 
-    RES_ASSERT(basic_CMD_REQ(CMD_RC_GET_DATA, sizeof(slot), &slot, &status));
-    RES_ASSERT(basic_READ(sizeof(RC_GET_DATA_S), &get_data, &status));
+    RES_ASSERT(basic_CMD_REQ(CMD_RC_GET_DATA, sizeof(slot), &slot, &g_ehif_status));
+    RES_ASSERT(basic_READ(sizeof(RC_GET_DATA_S), &get_data, &g_ehif_status));
 
     *count = get_data.head.cmd_count;
     if(*count > 12) {
@@ -792,7 +778,7 @@ static int _Rom_Record_Sync(VOCAL_SYS_STATUS_S *sys_status)
                 myDebug("dev[%d]:add new ram[%d]", j, i);
                 sys_status->Mic_Info[j].ram_slot = i + 1;
                 sys_status->Mic_Info[j].mute     = 0;
-                sys_status->Mic_Info[j].volume   = 320;
+                sys_status->Mic_Info[j].volume   = 80;
                 rom_free[i] = false;
                 SYS_CON_ASSERT(_Rom_Record_Alone(&sys_status->Mic_Info[j]), sys_status);
                 break;
@@ -894,7 +880,7 @@ static int _Updata_NetConfig(VOCAL_SYS_STATUS_S *sys_status)
     else {
         SYS_CON_ASSERT(_Rom_Record_Sync(sys_status), sys_status);
         SYS_CON_ASSERT(_Volume_Updata(sys_status), sys_status);
-        sys_status->Net_Updata = 1;
+        sys_status->Status_Updata = 1;
         SYS_CON_ASSERT(ehif_EHC_EVT_CLR(1<<1), sys_status);
     }
 
@@ -944,31 +930,13 @@ static int _mic_rc_cmd_process(VOCAL_SYS_STATUS_S *sys_status)
                     myDebug("[%d]cmd=%d", times, rc_data[0]);
                     sys_status->Mic_Info[i].cmd = rc_data[0];
                     _Remote_Control(&sys_status->Mic_Info[i]);
-                    sys_status->Vol_Updata = 1;
+                    sys_status->Status_Updata = 1;
                 }
                 times++;
             }
             cnt_record[i] = rc_count;
             cmd_record[i] = rc_data[0];
         }
-    }
-
-    return E_SUCCESS;
-}
-
-static int _Vocal_Sys_Process(VOCAL_SYS_STATUS_S *sys_status, EHIF_STATUS_S *ehif_status)
-{
-    static int i = 0;
-    if(CheckButtonActive(&sPairingButton, sys_status->Paring_Key)) {
-        sPairingButton.avtice = 0;
-        if(sPairingButton.status != BUTTON_FOCUSED && ehif_status->cmdreq_rdy) {
-            myDebug("Paring %d", i++);
-            SYS_CON_ASSERT(ehif_NWM_CONTROL_SIGNAL(), sys_status);
-        }
-    }
-
-    if(ehif_status->cmdreq_rdy) {
-        SYS_CON_ASSERT(_mic_rc_cmd_process(sys_status), sys_status);
     }
 
     return E_SUCCESS;
@@ -982,41 +950,50 @@ void Try_To_close_Net(void)
 #define BIT_ISSET(a, s)     (((a) >> (s)) & 0x1)
 int Vocal_Sys_updata_Process(VOCAL_SYS_STATUS_S *sys_status)
 {
-    EHIF_STATUS_S       ehif_status  = {0};
     uint16_t            gpio_val = 0;
+    static uint8_t      pairing_ctrl = 0;
 
     /* 1 updata sys_status */
-    static int time = 0;
-    if(time == 10) {
-        SYS_CON_ASSERT(basic_GET_STATUS(&ehif_status), sys_status);
-        time = 0;
-    }
-    else {
-        time++;
+    if(!g_ehif_status.cmdreq_rdy || g_ehif_status.pwr_state > 5) {
+        SYS_CON_ASSERT(basic_GET_STATUS(&g_ehif_status), sys_status);
+        return E_SUCCESS;
     }
 
-
-    if(!sys_status->Net_Enable) {
-        SYS_CON_ASSERT(ehif_NWM_CONTROL_ENABLE(1), sys_status);
+    if(!sys_status->Net_Enable) {   
     #if 0
         int i = 0;
         for(i = 0; i < 24; i++) {
             Mcp2210_WriteEEProm(cur_handle, i, 0);
         }
     #endif
+        SYS_CON_ASSERT(ehif_NWM_CONTROL_ENABLE(0), sys_status);
+        sleep(10);
+        SYS_CON_ASSERT(ehif_NWM_CONTROL_ENABLE(1), sys_status);
         sys_status->Net_Enable = 1;
     }
 
-    if(ehif_status.cmdreq_rdy) {
-        if(ehif_status.evt_nwk_chg) {
-            SYS_CON_ASSERT(_Updata_NetConfig(sys_status), sys_status);
+
+    if(g_ehif_status.evt_nwk_chg) {
+        SYS_CON_ASSERT(_Updata_NetConfig(sys_status), sys_status);
+    }
+    SYS_CON_ASSERT(_mic_rc_cmd_process(sys_status), sys_status);
+
+    SYS_CON_ASSERT(ehif_IO_GET_PIN_VAL(&gpio_val), sys_status); /* 28ms */
+    if(CheckButtonActive(&sPairingButton, BIT_ISSET(~gpio_val, 2))) {
+        sPairingButton.avtice = 0;
+        if(sPairingButton.status != BUTTON_FOCUSED) {
+            myDebug("Paring");
+            SYS_CON_ASSERT(ehif_NWM_CONTROL_SIGNAL(1), sys_status);
+            pairing_ctrl = 1;
         }
-        SYS_CON_ASSERT(ehif_IO_GET_PIN_VAL(&gpio_val), sys_status); /* 26ms */
-        sys_status->Paring_Key = BIT_ISSET(~gpio_val, 2);
     }
 
-    /* 2 process */
-    SYS_CON_ASSERT(_Vocal_Sys_Process(sys_status, &ehif_status), sys_status); /* 58ms */
+    if(pairing_ctrl) {
+        if(pairing_ctrl++ == 120) {
+            SYS_CON_ASSERT(ehif_NWM_CONTROL_SIGNAL(0), sys_status);
+            pairing_ctrl = 0;
+        }
+    }
 
     return E_SUCCESS;
 }

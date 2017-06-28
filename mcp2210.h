@@ -28,9 +28,7 @@ typedef struct vocal_sys_status_s
 {
     uint8_t         Spi_Conn;
     uint8_t         Net_Enable;
-    uint8_t         Net_Updata;
-    uint8_t         Vol_Updata;
-    uint8_t         Paring_Key;
+    uint8_t         Status_Updata;
     MIC_DEVINFO_S   Mic_Info[MIC_MAX_NUM];
 } VOCAL_SYS_STATUS_S;
 
