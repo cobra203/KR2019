@@ -39,5 +39,4 @@ FORMS    += dialog.ui
 win32: INCLUDEPATH += "D:/Documents/PROJECT/KR2019_CONSOLE/mcp2210_dll_v2.1.0/unmanaged/lib"
 win32: LIBS += -lsetupapi -L"D:/Documents/PROJECT/KR2019_CONSOLE/mcp2210_dll_v2.1.0/unmanaged/lib" -lmcp2210_dll_um_x86
 
-RESOURCES += \
-    resources.qrc
+RESOURCES +=

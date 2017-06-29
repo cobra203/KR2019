@@ -29,15 +29,19 @@ public:
     void Post_Event(UserEvent::USER_EVENT_TYPE_E UserType);
 
 private slots:
-    void showPrin(const QString&);
+    void show_status_resp(const QString&status);
     void vocal_updata_resp(QVariant);
 
 private:
     Ui::Dialog *ui;
     SpiThread   spiDaemon;
     QMutex mutex;
+    void vocal_speaker_enable(bool enable);
     void vocal_mic_enable(int id, bool enable);
     void vocal_mic_volume(int id, bool mute, int volume);
+    void mic_cfg_write(int id, uint32_t device_id);
+    void mic_cfg_read(int id, uint32_t *device_id);
+    void mic_updata(MIC_DEVINFO_S mic_info[]);
 };
 
 #endif // DIALOG_H

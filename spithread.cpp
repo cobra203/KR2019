@@ -50,7 +50,7 @@ void SpiThread::run()
             }
             else {
                 semaphore.acquire();
-                emit prin(QString("Disconnect"));
+                emit show_status(QString("Disconnect"));
                 QThread::currentThread()->msleep(500);
                 continue;
             }
@@ -60,7 +60,7 @@ void SpiThread::run()
             if(!MCP2210_Open(0, cur_handle)) {
                 STATUS_SET(THR_STA_MCP_OPEN);
                 semaphore.acquire();
-                emit prin(QString("Connect"));
+                emit show_status(QString("Connect"));
             }
             else {
                 STATUS_CLR(THR_STA_MCP_FOUND);
@@ -71,7 +71,7 @@ void SpiThread::run()
 
         time.restart();
         result = Vocal_Sys_updata_Process(&sys_status);
-        qDebug("%d ms", time.elapsed());
+        //qDebug("%d ms", time.elapsed());
 
         if(!sys_status.Spi_Conn) {
             if(STATUS_CHECK(THR_STA_MCP_OPEN)) {

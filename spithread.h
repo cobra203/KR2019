@@ -17,7 +17,7 @@ public:
     void stop();
 
 signals:
-    void prin(const QString &);
+    void show_status(const QString &);
     void vocal_updata(QVariant);
 
 protected:
