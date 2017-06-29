@@ -1,5 +1,7 @@
 #include "spithread.h"
 #include <QTime>
+#include <QtWidgets/QSlider>
+#include <QtWidgets/QCheckBox>
 
 #define BIT_ISSET(a, s)     (((a) >> (s)) & 0x1)
 #define BIT_SET(a, s)       ((a) = (a) | 0x1 << (s))
@@ -23,10 +25,9 @@ SpiThread::SpiThread() : semaphore(1)
 
 SpiThread::~SpiThread()
 {
-    VOCAL_SYS_STATUS_S sys_status;
-    QVariant DataVar;
-    DataVar.setValue(sys_status);
-    qRegisterMetaType<QVariant>("QVariant"); //写在构造函数里
+    //QVariant DataVar;
+    //DataVar.setValue(sys_status);
+    //qRegisterMetaType<QVariant>("QVariant");
 }
 
 void SpiThread::stop()
@@ -34,14 +35,27 @@ void SpiThread::stop()
     stopped = true;
 }
 
+void SpiThread::mic_volume_change_resp(int data)
+{
+    if(QSlider *slider = dynamic_cast<QSlider*>(sender())) {
+        qDebug("0x%08x, volume=%d", slider->whatsThis().toUInt(), data);
+    }
+    else if(QCheckBox *checkbox = dynamic_cast<QCheckBox*>(sender())) {
+        qDebug("0x%08x, mute=%d", checkbox->whatsThis().toUInt(), data);
+    }
+
+}
+
 void SpiThread::run()
 {
     int     count       = 0;
     void    *cur_handle = NULL;
     int     result      = 0;
-    VOCAL_SYS_STATUS_S sys_status = {0};
+
     QTime time;
     QVariant var1;
+    static int times = 0;
+    memset(&sys_status, 0, sizeof(sys_status));
 
     while(!stopped) {
         if(!STATUS_CHECK(THR_STA_MCP_FOUND)) {
@@ -71,7 +85,7 @@ void SpiThread::run()
 
         time.restart();
         result = Vocal_Sys_updata_Process(&sys_status);
-        //qDebug("%d ms", time.elapsed());
+        //qDebug("%d ms, %d", time.elapsed(), times++);
 
         if(!sys_status.Spi_Conn) {
             if(STATUS_CHECK(THR_STA_MCP_OPEN)) {

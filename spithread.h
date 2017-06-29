@@ -20,6 +20,9 @@ signals:
     void show_status(const QString &);
     void vocal_updata(QVariant);
 
+private slots:
+    void mic_volume_change_resp(int);
+
 protected:
     void run();
 
@@ -29,6 +32,7 @@ private:
 
 public:
     QSemaphore semaphore;
+    VOCAL_SYS_STATUS_S sys_status;
 };
 
 #endif // SPITHREAD_H

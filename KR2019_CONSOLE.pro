@@ -25,12 +25,10 @@ DEFINES += QT_DEPRECATED_WARNINGS
 
 SOURCES += main.cpp\
         dialog.cpp \
-    userevent.cpp \
     mcp2210.cpp \
     spithread.cpp
 
 HEADERS  += dialog.h \
-    userevent.h \
     mcp2210.h \
     spithread.h
 
