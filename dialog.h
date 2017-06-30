@@ -28,19 +28,20 @@ public:
 private slots:
     void show_status_resp(const QString&status);
     void vocal_updata_resp(QVariant);
-    void slider_speaker_valchange(int);
-    void checkbox_speaker_statechange(int);
 
 private:
     Ui::Dialog *ui;
     SpiThread   spiDaemon;
-    QMutex mutex;
-    void vocal_speaker_enable(bool enable);
+
+    void vocal_spk_enable(bool enable);
+    void vocal_spk_volume(bool mute, int volume);
     void vocal_mic_enable(int id, bool enable, uint32_t device_id);
     void vocal_mic_volume(int id, bool mute, int volume);
     void mic_cfg_write(int id, uint32_t device_id);
     void mic_cfg_read(int id, uint32_t *device_id);
+    void spk_updata(MIC_DEVINFO_S *spk_dev);
     void mic_updata(MIC_DEVINFO_S mic_info[]);
+
 };
 
 #endif // DIALOG_H

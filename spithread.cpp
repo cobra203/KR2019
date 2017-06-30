@@ -37,13 +37,46 @@ void SpiThread::stop()
 
 void SpiThread::mic_volume_change_resp(int data)
 {
-    if(QSlider *slider = dynamic_cast<QSlider*>(sender())) {
-        qDebug("0x%08x, volume=%d", slider->whatsThis().toUInt(), data);
+    QSlider     *slider = NULL;
+    QCheckBox   *checkbox = NULL;
+    uint32_t    device_id = 0;
+
+    if(slider = dynamic_cast<QSlider*>(sender())) {
+        device_id = slider->whatsThis().toUInt();
     }
-    else if(QCheckBox *checkbox = dynamic_cast<QCheckBox*>(sender())) {
-        qDebug("0x%08x, mute=%d", checkbox->whatsThis().toUInt(), data);
+    else if(checkbox = dynamic_cast<QCheckBox*>(sender())) {
+        device_id = checkbox->whatsThis().toUInt();
     }
 
+    for(int i = 0; i < MIC_MAX_NUM; i++) {
+        if(device_id && sys_status.mic_dev[i].device_id == device_id) {
+            if(slider) {
+                sys_status.mic_dev[i].volume = data;
+                //qDebug("mic[%d]:id=0x%08x, volume=%d", i, device_id, data);
+            }
+            else if(checkbox) {
+                sys_status.mic_dev[i].mute   = data ? true : false;
+                //qDebug("mic[%d]:id=0x%08x, mute=%d", i, device_id, data);
+            }
+            sys_status.mic_dev[i].ui_cmd = true;
+        }
+    }
+}
+
+void SpiThread::speaker_volume_change_resp(int data)
+{
+    QSlider     *slider = NULL;
+    QCheckBox   *checkbox = NULL;
+
+    if(slider = dynamic_cast<QSlider*>(sender())) {
+        sys_status.spk_dev.volume = data;
+        //qDebug("speaker, volume=%d", data);
+    }
+    else if(checkbox = dynamic_cast<QCheckBox*>(sender())) {
+        //qDebug("speaker, mute=%d", data);
+        sys_status.spk_dev.mute = data ? true : false;;
+    }
+    sys_status.spk_dev.ui_cmd = true;
 }
 
 void SpiThread::run()
@@ -52,14 +85,14 @@ void SpiThread::run()
     void    *cur_handle = NULL;
     int     result      = 0;
 
-    QTime time;
-    QVariant var1;
+    QTime       time;
+    QVariant    sigarg;
     static int times = 0;
     memset(&sys_status, 0, sizeof(sys_status));
 
     while(!stopped) {
         if(!STATUS_CHECK(THR_STA_MCP_FOUND)) {
-            if(!MCP2210_GetDevCount(&count)) {
+            if(!mcp2210_get_dev_count(&count)) {
                 STATUS_SET(THR_STA_MCP_FOUND);
             }
             else {
@@ -71,7 +104,7 @@ void SpiThread::run()
         }
 
         if(!STATUS_CHECK(THR_STA_MCP_OPEN)) {
-            if(!MCP2210_Open(0, cur_handle)) {
+            if(!mcp2210_open(0, cur_handle)) {
                 STATUS_SET(THR_STA_MCP_OPEN);
                 semaphore.acquire();
                 emit show_status(QString("Connect"));
@@ -84,29 +117,29 @@ void SpiThread::run()
         }
 
         time.restart();
-        result = Vocal_Sys_updata_Process(&sys_status);
+        result = vocal_working(&sys_status);
         //qDebug("%d ms, %d", time.elapsed(), times++);
 
-        if(!sys_status.Spi_Conn) {
+        if(!sys_status.spi_conn) {
             if(STATUS_CHECK(THR_STA_MCP_OPEN)) {
-                MCP2210_Close(cur_handle);
+                mcp2210_close(cur_handle);
             }
             STATUS_CLR(THR_STA_MCP_OPEN);
             STATUS_CLR(THR_STA_MCP_FOUND);
         }
-        else if(sys_status.Status_Updata) {
-            var1.setValue(sys_status);
+        else if(sys_status.sys_updata) {
+            sigarg.setValue(sys_status);
 
             semaphore.acquire();
-            emit vocal_updata(var1);
+            emit vocal_updata(sigarg);
 
             qDebug("%d ms", time.elapsed());
-            sys_status.Status_Updata = 0;
+            sys_status.sys_updata = 0;
         }
     }
     if(STATUS_CHECK(THR_STA_MCP_OPEN)) {
-        Try_To_close_Net();
-        MCP2210_Close(cur_handle);
+        vocal_nwk_tryto_close();
+        mcp2210_close(cur_handle);
     }
     stopped = false;
 }

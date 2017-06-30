@@ -18,26 +18,29 @@ typedef struct mic_devinfo_s
     uint8_t     ach;
     uint8_t     slot;
     uint8_t     cmd;
+    uint8_t     ui_cmd;
     uint8_t     ram_slot;
     uint8_t     mute;
     int16_t     volume;
 } MIC_DEVINFO_S;
 
 #define MIC_MAX_NUM 4
+#define SPK_MAX_NUM 1
 typedef struct vocal_sys_status_s
 {
-    uint8_t         Spi_Conn;
-    uint8_t         Net_Enable;
-    uint8_t         Status_Updata;
-    MIC_DEVINFO_S   Mic_Info[MIC_MAX_NUM];
+    uint8_t         spi_conn;
+    uint8_t         nwk_enable;
+    uint8_t         sys_updata;
+    MIC_DEVINFO_S   mic_dev[MIC_MAX_NUM];
+    MIC_DEVINFO_S   spk_dev;
 } VOCAL_SYS_STATUS_S;
 
-int MCP2210_GetDevCount(int *count);
-int MCP2210_Open(int count, void *handle);
-int MCP2210_Close(void *handle);
+int     mcp2210_get_dev_count(int *count);
+int     mcp2210_open(int count, void *handle);
+int     mcp2210_close(void *handle);
 
-int Vocal_Sys_updata_Process(VOCAL_SYS_STATUS_S *sys_status);
-void Try_To_close_Net(void);
+int     vocal_working(VOCAL_SYS_STATUS_S *sys_status);
+void    vocal_nwk_tryto_close(void);
 
 #ifdef __cplusplus
 }

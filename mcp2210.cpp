@@ -100,7 +100,7 @@ typedef struct spi_status_s
 
 void *cur_handle;
 
-static int _GpioInit(void *handle)
+static int _mcp2210_gpio_init(void *handle)
 {
     int ret = 0;
     GPIO_CONFIG_S cfg = {0};
@@ -121,7 +121,7 @@ static int _GpioInit(void *handle)
     return ret;
 }
 
-static int _SpiInit(void *handle)
+static int _mcp2210_spi_init(void *handle)
 {
     int ret = 0;
     SPI_CONFIG_S cfg = {0};
@@ -144,48 +144,15 @@ static int _SpiInit(void *handle)
     return ret;
 }
 
-int MCP2210_GetDevCount(int *count)
-{
-    *count = Mcp2210_GetConnectedDevCount(DEFAULT_VID, DEFAULT_PID);
+#define SIT_DEV_ID	0x0
+#define SIT_VOLUME	(SIT_DEV_ID + (sizeof(uint32_t) * (MIC_MAX_NUM + SPK_MAX_NUM)))
+#define SIT_MIC_SLOT	0
+#define SIT_SPK_SLOT	MIC_MAX_NUM
 
-    if(*count <= 0) {
-        return E_ERR_DEVICE_NOT_FOUND;
-    }
-
-    return Mcp2210_GetLastError();
-}
-
-int MCP2210_Open(int count, void *handle)
-{
-    wchar_t buff[128] = {0};
-    unsigned long size;
-
-    handle = Mcp2210_OpenByIndex(DEFAULT_VID, DEFAULT_PID, count, buff, &size);
-
-    if((int)handle <= 0) {
-        return Mcp2210_GetLastError();
-    }
-
-    if(_GpioInit(handle) || _SpiInit(handle)) {
-        return Mcp2210_GetLastError();
-    }
-
-    cur_handle = handle;
-
-    return E_SUCCESS;
-}
-
-int MCP2210_Close(void *handle)
-{
-    return Mcp2210_Close(handle);
-}
-
-#define SIT_DEVICE_ID 0x0
-#define SIT_VOLUME    (sizeof(uint32_t) * MIC_MAX_NUM)
 #define RECORD_GET    0
 #define RECORD_SET    1
 
-static int _MCP2210_Record(uint8_t ops, uint8_t type_sit, uint8_t slot, void *data)
+static int _mcp2210_record(uint8_t ops, uint8_t type_sit, uint8_t slot, void *data)
 {
     int     i       = 0;
     uint8_t size    = type_sit ? sizeof(uint16_t) : sizeof(uint32_t);
@@ -208,6 +175,42 @@ static int _MCP2210_Record(uint8_t ops, uint8_t type_sit, uint8_t slot, void *da
     return E_SUCCESS;
 }
 
+
+int mcp2210_get_dev_count(int *count)
+{
+    *count = Mcp2210_GetConnectedDevCount(DEFAULT_VID, DEFAULT_PID);
+
+    if(*count <= 0) {
+        return E_ERR_DEVICE_NOT_FOUND;
+    }
+
+    return Mcp2210_GetLastError();
+}
+
+int mcp2210_open(int count, void *handle)
+{
+    wchar_t buff[128] = {0};
+    unsigned long size;
+
+    handle = Mcp2210_OpenByIndex(DEFAULT_VID, DEFAULT_PID, count, buff, &size);
+
+    if((int)handle <= 0) {
+        return Mcp2210_GetLastError();
+    }
+
+    if(_mcp2210_gpio_init(handle) || _mcp2210_spi_init(handle)) {
+        return Mcp2210_GetLastError();
+    }
+
+    cur_handle = handle;
+
+    return E_SUCCESS;
+}
+
+int mcp2210_close(void *handle)
+{
+    return Mcp2210_Close(handle);
+}
 /**********************************************************************************/
 
 /**********************************************************************************/
@@ -333,7 +336,7 @@ typedef enum spi_cmd_req_type_e
 
 } SPI_CMD_REQ_TYPE_E;
 
-static int CheckEndian(void)
+static int _check_endian(void)
 {
     union{
         uint32_t i;
@@ -352,10 +355,10 @@ static int CheckEndian(void)
                     (((uint32_t)(A) & 0x0000ff00) << 8)  | \
                     (((uint32_t)(A) & 0x000000ff) << 24))
 
-#define Swap16(x) (CheckEndian() ? (x) : _SWAP16(x))
-#define Swap32(x) (CheckEndian() ? (x) : _SWAP32(x))
+#define swap16(x) (_check_endian() ? (x) : _SWAP16(x))
+#define swap32(x) (_check_endian() ? (x) : _SWAP32(x))
 
-EHIF_STATUS_S g_ehif_status = {0};
+EHIF_STATUS_S gst_ehif_status = {0};
 
 static int _basic_operation(EHIF_MAGIC_NAM_E magic,
                         uint16_t cmd, uint16_t *len, void *data, EHIF_STATUS_S *status)
@@ -374,7 +377,7 @@ static int _basic_operation(EHIF_MAGIC_NAM_E magic,
     memset(status, 0, sizeof(EHIF_STATUS_S));
 
     phead = (magic == EHIF_MAGIC_CMD_REQ) ? (void *)&cmd_head : (void *)&rw_head;
-    *(uint16_t *)phead = Swap16(*(uint16_t *)phead);
+    *(uint16_t *)phead = swap16(*(uint16_t *)phead);
 
     memset(sendbuf, 0, EHIF_HEAD_SIZE + *len);
     memset(recvbuf, 0, EHIF_HEAD_SIZE + *len);
@@ -396,7 +399,7 @@ static int _basic_operation(EHIF_MAGIC_NAM_E magic,
         break;
     }
 
-    *(uint16_t *)recvbuf = Swap16(*(uint16_t *)recvbuf);
+    *(uint16_t *)recvbuf = swap16(*(uint16_t *)recvbuf);
     memcpy(status, recvbuf, EHIF_HEAD_SIZE);
     free(sendbuf);
     free(recvbuf);
@@ -490,27 +493,36 @@ typedef struct rc_get_data_s
 
 static int ehif_DI_GET_DEVICE_INFO(CC85XX_DEV_INFO_S *dev_info)
 {
-    RES_ASSERT(basic_CMD_REQ(CMD_DI_GET_DEVICE_INFO, 0, NULL, &g_ehif_status));
-    RES_ASSERT(basic_READ(sizeof(CC85XX_DEV_INFO_S), (uint8_t *)dev_info, &g_ehif_status));
+    RES_ASSERT(basic_CMD_REQ(CMD_DI_GET_DEVICE_INFO, 0, NULL, &gst_ehif_status));
+    RES_ASSERT(basic_READ(sizeof(CC85XX_DEV_INFO_S), (uint8_t *)dev_info, &gst_ehif_status));
 
-    dev_info->device_id = Swap32(dev_info->device_id);
-    dev_info->manf_id   = Swap32(dev_info->manf_id);
-    dev_info->prod_id   = Swap32(dev_info->prod_id);
+    dev_info->device_id = swap32(dev_info->device_id);
+    dev_info->manf_id   = swap32(dev_info->manf_id);
+    dev_info->prod_id   = swap32(dev_info->prod_id);
+
+    return E_SUCCESS;
+}
+
+static int ehif_EHC_EVT_MASK(uint8_t val)
+{
+    uint8_t buf[2] = {1, val};
+
+    RES_ASSERT(basic_CMD_REQ(CMD_EHC_EVT_MASK, sizeof(buf), buf, &gst_ehif_status));
 
     return E_SUCCESS;
 }
 
 static int ehif_EHC_EVT_CLR(uint8_t val)
 {
-    RES_ASSERT(basic_CMD_REQ(CMD_EHC_EVT_CLR, sizeof(uint8_t), &val, &g_ehif_status));
+    RES_ASSERT(basic_CMD_REQ(CMD_EHC_EVT_CLR, sizeof(uint8_t), &val, &gst_ehif_status));
 
     return E_SUCCESS;
 }
 
 static int ehif_NVS_GET_DATA(uint8_t slot, void *data)
 {
-    RES_ASSERT(basic_CMD_REQ(CMD_NVS_GET_DATA, sizeof(uint8_t), &slot, &g_ehif_status));
-    RES_ASSERT(basic_READ(sizeof(uint32_t), data, &g_ehif_status));
+    RES_ASSERT(basic_CMD_REQ(CMD_NVS_GET_DATA, sizeof(uint8_t), &slot, &gst_ehif_status));
+    RES_ASSERT(basic_READ(sizeof(uint32_t), data, &gst_ehif_status));
 
     //*(uint32_t *)nwm_id = Swap32(*(uint32_t *)nwm_id);
 
@@ -524,7 +536,7 @@ static int ehif_NVS_SET_DATA(uint8_t slot, uint32_t data)
 
     memcpy(&set_data[1], &data, sizeof(uint32_t));
 
-    RES_ASSERT(basic_CMD_REQ(CMD_NVS_SET_DATA, sizeof(set_data), set_data, &g_ehif_status));
+    RES_ASSERT(basic_CMD_REQ(CMD_NVS_SET_DATA, sizeof(set_data), set_data, &gst_ehif_status));
 
     return E_SUCCESS;
 }
@@ -533,11 +545,11 @@ static int ehif_IO_GET_PIN_VAL(uint16_t *gpio_val)
 {
     uint8_t         recvbuf[4] = {0};
 
-    RES_ASSERT(basic_CMD_REQ(CMD_IO_GET_PIN_VAL, 0, NULL, &g_ehif_status));
-    RES_ASSERT(basic_READ(sizeof(recvbuf), recvbuf, &g_ehif_status));
+    RES_ASSERT(basic_CMD_REQ(CMD_IO_GET_PIN_VAL, 0, NULL, &gst_ehif_status));
+    RES_ASSERT(basic_READ(sizeof(recvbuf), recvbuf, &gst_ehif_status));
 
     memcpy(gpio_val, &recvbuf[2], sizeof(uint16_t));
-    *gpio_val = Swap16(*gpio_val);
+    *gpio_val = swap16(*gpio_val);
 
     return E_SUCCESS;
 }
@@ -546,7 +558,7 @@ static int ehif_NWM_CONTROL_ENABLE(uint8_t enable)
 {
     uint8_t         sendbuf[2] = {0, enable};
 
-    RES_ASSERT(basic_CMD_REQ(CMD_NVM_CONTROL_ENABLE, sizeof(sendbuf), sendbuf, &g_ehif_status));
+    RES_ASSERT(basic_CMD_REQ(CMD_NVM_CONTROL_ENABLE, sizeof(sendbuf), sendbuf, &gst_ehif_status));
 
     return E_SUCCESS;
 }
@@ -555,15 +567,15 @@ static int ehif_NWM_CONTROL_SIGNAL(uint8_t enable)
 {
     uint8_t         sendbuf[2] = {0, enable};
 
-    RES_ASSERT(basic_CMD_REQ(CMD_NVM_CONTROL_SIGNAL, sizeof(sendbuf), sendbuf, &g_ehif_status));
+    RES_ASSERT(basic_CMD_REQ(CMD_NVM_CONTROL_SIGNAL, sizeof(sendbuf), sendbuf, &gst_ehif_status));
 
     return E_SUCCESS;
 }
 
 static int ehif_CMD_NVM_GET_STATUS(CC85XX_NWM_GET_STATUS_S *nwm_status)
 {
-    RES_ASSERT(basic_CMD_REQ(CMD_NVM_GET_STATUS, 0, NULL, &g_ehif_status));
-    RES_ASSERT(basic_READ(sizeof(CC85XX_NWM_GET_STATUS_S), nwm_status, &g_ehif_status));
+    RES_ASSERT(basic_CMD_REQ(CMD_NVM_GET_STATUS, 0, NULL, &gst_ehif_status));
+    RES_ASSERT(basic_READ(sizeof(CC85XX_NWM_GET_STATUS_S), nwm_status, &gst_ehif_status));
 
     return E_SUCCESS;
 }
@@ -572,18 +584,18 @@ static int ehif_VC_SET_VOLUME(CC85XX_SET_VOLUME_S *set_volume)
 {
     void            *pdata = (void *)set_volume;
 
-    set_volume->volume = Swap16(set_volume->volume);
-    RES_ASSERT(basic_CMD_REQ(CMD_VC_SET_VOLUME, sizeof(CC85XX_SET_VOLUME_S), pdata, &g_ehif_status));
+    set_volume->volume = swap16(set_volume->volume);
+    RES_ASSERT(basic_CMD_REQ(CMD_VC_SET_VOLUME, sizeof(CC85XX_SET_VOLUME_S), pdata, &gst_ehif_status));
 
     return E_SUCCESS;
 }
 
 static int ehif_VC_GET_VOLUME(CC85XX_GET_VOLUME_S *get_volume, uint16_t *volume)
 {
-    RES_ASSERT(basic_CMD_REQ(CMD_VC_GET_VOLUME, 1, get_volume, &g_ehif_status));
-    RES_ASSERT(basic_READ(sizeof(uint16_t), volume, &g_ehif_status));
+    RES_ASSERT(basic_CMD_REQ(CMD_VC_GET_VOLUME, 1, get_volume, &gst_ehif_status));
+    RES_ASSERT(basic_READ(sizeof(uint16_t), volume, &gst_ehif_status));
 
-    *volume = Swap16(*volume);
+    *volume = swap16(*volume);
 
     return E_SUCCESS;
 }
@@ -592,8 +604,8 @@ static int ehif_RC_GET_DATA(uint8_t slot, uint8_t *data, uint8_t *count)
 {
     RC_GET_DATA_S   get_data    = {0};
 
-    RES_ASSERT(basic_CMD_REQ(CMD_RC_GET_DATA, sizeof(slot), &slot, &g_ehif_status));
-    RES_ASSERT(basic_READ(sizeof(RC_GET_DATA_S), &get_data, &g_ehif_status));
+    RES_ASSERT(basic_CMD_REQ(CMD_RC_GET_DATA, sizeof(slot), &slot, &gst_ehif_status));
+    RES_ASSERT(basic_READ(sizeof(RC_GET_DATA_S), &get_data, &gst_ehif_status));
 
     *count = get_data.head.cmd_count;
     if(*count > 12) {
@@ -612,6 +624,8 @@ static int _ehif_ctrl_mic_output_volume(uint8_t mute_op, uint8_t set_op, uint8_t
     set_volume.set_op       = set_op;
     set_volume.volume       = volume;
 
+    //myDebug("mute=%d, set=%d, log=%d, vol=0x%04x", mute_op, set_op, log_cnn, volume);
+
     ehif_VC_SET_VOLUME(&set_volume);
 
     return E_SUCCESS;
@@ -621,6 +635,9 @@ static int _ehif_ctrl_mic_output_volume(uint8_t mute_op, uint8_t set_op, uint8_t
     _ehif_ctrl_mic_output_volume(2, 1, 0, 0)
 #define ehif_ctrl_mic_output_volume_absolute(cnn, abs) \
     _ehif_ctrl_mic_output_volume(2, 3, (cnn), (abs))
+
+#define ehif_ctrl_speaker_volume(abs) \
+    _ehif_ctrl_mic_output_volume(2, 1, 0, (abs))
 
 /**********************************************************************************/
 
@@ -650,27 +667,27 @@ typedef struct button_s
     uint16_t    duration;
 } BUTTON_S;
 
-static int CheckButtonActive(BUTTON_S *button, uint8_t IsPress)
+static int _check_button_active(BUTTON_S *button, uint8_t is_press)
 {
     /* shack process */
     if(button->shack) {
-        if((button->shack == SHACK_OLD_PRESS  && IsPress) ||
-           (button->shack == SHACK_OLD_NORMAL && !IsPress)) {
+        if((button->shack == SHACK_OLD_PRESS  && is_press) ||
+           (button->shack == SHACK_OLD_NORMAL && !is_press)) {
             button->duration++;
         }
         else {
-            button->shack = IsPress ? SHACK_OLD_PRESS : SHACK_OLD_NORMAL;
+            button->shack = is_press ? SHACK_OLD_PRESS : SHACK_OLD_NORMAL;
             button->duration = 0;
         }
 
         if(button->duration >= SHACK_INTERVAL) {
             button->shack     = 0;
             button->duration  = 0;
-            if(!button->status && IsPress) {
+            if(!button->status && is_press) {
                 button->status = BUTTON_PRESSED;
                 button->avtice = 1;
             }
-            else if(button->status && !IsPress) {
+            else if(button->status && !is_press) {
                 button->status = BUTTON_NORMAL;
             }
         }
@@ -679,13 +696,13 @@ static int CheckButtonActive(BUTTON_S *button, uint8_t IsPress)
 
     switch(button->status) {
     case BUTTON_NORMAL:
-        if(IsPress) {
+        if(is_press) {
             button->shack = SHACK_OLD_PRESS;
         }
         break;
     case BUTTON_PRESSED:
     case BUTTON_FOCUSED:
-        if(!IsPress) {
+        if(!is_press) {
             button->shack = SHACK_OLD_NORMAL;
             button->duration  = 0;
         }
@@ -704,17 +721,17 @@ static int CheckButtonActive(BUTTON_S *button, uint8_t IsPress)
 /**********************************************************************************/
 /* Vocal System Control Functions                                                 */
 /**********************************************************************************/
-BUTTON_S sPairingButton;
+BUTTON_S gst_button_pairing;
 
 #define SYS_CON_ASSERT(f, s) \
 {                                   \
     int res = (f);                  \
     if(res != E_SUCCESS) {          \
-        (s)->Spi_Conn = 0;          \
-        (s)->Net_Enable = 0;        \
+        (s)->spi_conn = 0;          \
+        (s)->nwk_enable = 0;        \
         return E_ERR_SPI_TIMEOUT;   \
     }                               \
-    (s)->Spi_Conn = 1;              \
+    (s)->spi_conn = 1;              \
     (res);                          \
 }
 
@@ -724,43 +741,41 @@ typedef struct dev_volume_s
     uint32_t    mute    :1;
 } DEV_VOLUME_S;
 
-static int _Rom_Record_Alone(MIC_DEVINFO_S *dev)
+static int _rom_record_write(MIC_DEVINFO_S *dev, uint8_t slot_sit)
 {
-    int res = 0;
     DEV_VOLUME_S volume = {0};
 
     volume.mute   = dev->mute;
     volume.volume = dev->volume & 0x7fff;
 
-    res = _MCP2210_Record(RECORD_SET, SIT_DEVICE_ID, dev->ram_slot - 1, &dev->device_id);
-    if(res) {
-        return res;
-    }
+    RES_ASSERT(_mcp2210_record(RECORD_SET, SIT_DEV_ID, slot_sit + dev->ram_slot - 1, &dev->device_id));
+    RES_ASSERT(_mcp2210_record(RECORD_SET, SIT_VOLUME, slot_sit + dev->ram_slot - 1, &volume));
 
-    return _MCP2210_Record(RECORD_SET, SIT_VOLUME, dev->ram_slot - 1, &volume);
+	return E_SUCCESS;
 }
 
-static int _Rom_Record_Sync(VOCAL_SYS_STATUS_S *sys_status)
+static int _rom_record_sync(VOCAL_SYS_STATUS_S *sys_status)
 {
     int i, j;
     uint32_t     rom_dev_id = 0;
     DEV_VOLUME_S rom_volume = {0};
     uint8_t      rom_free[MIC_MAX_NUM] = {0};
 
+	/* 1 mic sync */
     for(i = 0; i < MIC_MAX_NUM; i++) {
-        SYS_CON_ASSERT(_MCP2210_Record(RECORD_GET, SIT_DEVICE_ID, i, &rom_dev_id), sys_status);
-        SYS_CON_ASSERT(_MCP2210_Record(RECORD_GET, SIT_VOLUME, i, &rom_volume), sys_status);
-        myDebug("RAM[%d]:id=0x%08x, volume=0x%04x, mute=%d",
+        SYS_CON_ASSERT(_mcp2210_record(RECORD_GET, SIT_DEV_ID, SIT_MIC_SLOT + i, &rom_dev_id), sys_status);
+        SYS_CON_ASSERT(_mcp2210_record(RECORD_GET, SIT_VOLUME, SIT_MIC_SLOT + i, &rom_volume), sys_status);
+        myDebug("ROM[%d]:id=0x%08x, volume=%-3d, mute=%d",
                i, rom_dev_id, rom_volume.volume, rom_volume.mute);
         if(!rom_dev_id) {
             rom_free[i] = true;
             continue;
         }
         for(j = 0; j < MIC_MAX_NUM; j++) {
-            if(rom_dev_id == (uint32_t)(sys_status->Mic_Info[j].device_id)) {
-                sys_status->Mic_Info[j].ram_slot = i + 1;
-                sys_status->Mic_Info[j].mute     = rom_volume.mute;
-                sys_status->Mic_Info[j].volume   = rom_volume.volume & 0x7fff;
+            if(rom_dev_id == (uint32_t)(sys_status->mic_dev[j].device_id)) {
+                sys_status->mic_dev[j].ram_slot = i + 1;
+                sys_status->mic_dev[j].mute     = rom_volume.mute;
+                sys_status->mic_dev[j].volume   = rom_volume.volume & 0x7fff;
                 break;
             }
         }
@@ -770,26 +785,42 @@ static int _Rom_Record_Sync(VOCAL_SYS_STATUS_S *sys_status)
     }
 
     for(j = 0; j < MIC_MAX_NUM; j++) {
-        if(!sys_status->Mic_Info[j].device_id || sys_status->Mic_Info[j].ram_slot) {
+        if(!sys_status->mic_dev[j].device_id || sys_status->mic_dev[j].ram_slot) {
             continue;
         }
         for(i = 0; i < MIC_MAX_NUM; i++) {
             if(rom_free[i]) {
                 myDebug("dev[%d]:add new ram[%d]", j, i);
-                sys_status->Mic_Info[j].ram_slot = i + 1;
-                sys_status->Mic_Info[j].mute     = 0;
-                sys_status->Mic_Info[j].volume   = 80;
+                sys_status->mic_dev[j].ram_slot = i + 1;
+                sys_status->mic_dev[j].mute     = 0;
+                sys_status->mic_dev[j].volume   = 80;
                 rom_free[i] = false;
-                SYS_CON_ASSERT(_Rom_Record_Alone(&sys_status->Mic_Info[j]), sys_status);
+                SYS_CON_ASSERT(_rom_record_write(&sys_status->mic_dev[j], SIT_MIC_SLOT), sys_status);
                 break;
             }
         }
     }
 
+	/* 2 spk_sync */
+    SYS_CON_ASSERT(_mcp2210_record(RECORD_GET, SIT_VOLUME, SIT_SPK_SLOT, &rom_volume), sys_status);
+    myDebug("ROM[SPK]:volume=%-3d, mute=%d", rom_volume.volume, rom_volume.mute);
+    if((rom_volume.volume & 0x7fff) <= 0 ||
+       (rom_volume.volume & 0x7fff) > 100) {
+        sys_status->spk_dev.ram_slot = 1;
+        sys_status->spk_dev.mute = 0;
+        sys_status->spk_dev.volume = 100;
+        SYS_CON_ASSERT(_rom_record_write(&sys_status->spk_dev, SIT_SPK_SLOT), sys_status);
+    }
+    else {
+        sys_status->spk_dev.ram_slot = 1;
+        sys_status->spk_dev.mute = rom_volume.mute;
+        sys_status->spk_dev.volume = rom_volume.volume & 0x7fff;
+    }
+
     return E_SUCCESS;
 }
 
-static int16_t _Volume_Level_To_Db(int16_t lv) {
+static int16_t _volume_to_db(int16_t lv) {
     if(lv >= 100) {
         lv = 100;
     }
@@ -811,30 +842,38 @@ static int16_t _Volume_Level_To_Db(int16_t lv) {
     return lv * 14;
 }
 
-static int _Volume_Set_Alone(MIC_DEVINFO_S *dev)
+static int _volume_mic_set(MIC_DEVINFO_S *dev)
 {
     if(dev->mute || dev->volume == 0) {
         return ehif_ctrl_mic_output_volume_absolute(dev->ach, 0xfc00);
     }
-
-    return ehif_ctrl_mic_output_volume_absolute(dev->ach, 0xfe70 + _Volume_Level_To_Db(dev->volume));
+    return ehif_ctrl_mic_output_volume_absolute(dev->ach, 0xfe70 + _volume_to_db(dev->volume));
 }
 
-static int _Volume_Updata(VOCAL_SYS_STATUS_S *sys_status)
+static int _volume_spk_set(MIC_DEVINFO_S *dev)
+{
+    if(dev->mute || dev->volume == 0) {
+        return ehif_ctrl_speaker_volume(0xfc00);
+    }
+    return ehif_ctrl_speaker_volume(0xfe70 + _volume_to_db(dev->volume));
+}
+
+static int _volume_all_set(VOCAL_SYS_STATUS_S *sys_status)
 {
     int i;
 
-    RES_ASSERT(ehif_ctrl_mic_output_volume_init());
+    RES_ASSERT(_volume_spk_set(&sys_status->spk_dev));
+
     for(i = 0; i < MIC_MAX_NUM; i++) {
-        if(sys_status->Mic_Info[i].device_id) {
-            RES_ASSERT(_Volume_Set_Alone(&sys_status->Mic_Info[i]));
+        if(sys_status->mic_dev[i].device_id) {
+            RES_ASSERT(_volume_mic_set(&sys_status->mic_dev[i]));
         }
     }
 
     return E_SUCCESS;
 }
 
-static uint8_t _GetAuidoChannel(uint16_t ach_used)
+static uint8_t _auido_channel_get(uint16_t ach_used)
 {
     if(ach_used >> 12 & 0x1) {
         return 12;
@@ -845,7 +884,7 @@ static uint8_t _GetAuidoChannel(uint16_t ach_used)
     return 16;
 }
 
-static int _Updata_NetConfig(VOCAL_SYS_STATUS_S *sys_status)
+static int _nwk_updata(VOCAL_SYS_STATUS_S *sys_status)
 {
     CC85XX_NWM_GET_STATUS_S nwm_status = {0};
     int     i;
@@ -854,8 +893,8 @@ static int _Updata_NetConfig(VOCAL_SYS_STATUS_S *sys_status)
     uint8_t updata_data_abnormal = false;
 
     myDebug("updata dev info");
-    memset(sys_status->Mic_Info, 0, sizeof(sys_status->Mic_Info));
-    sleep(200);
+    memset(sys_status->mic_dev, 0, sizeof(sys_status->mic_dev));
+    sleep(300);
     SYS_CON_ASSERT(ehif_CMD_NVM_GET_STATUS(&nwm_status), sys_status);
     for(i = 0; i < MIC_MAX_NUM; i++) {
         id       = &nwm_status.dev_data[0 + i*16];
@@ -865,11 +904,11 @@ static int _Updata_NetConfig(VOCAL_SYS_STATUS_S *sys_status)
                 updata_data_abnormal = true;
                 continue;
             }
-            sys_status->Mic_Info[i].device_id = Swap32(*(uint32_t *)id);
-            sys_status->Mic_Info[i].ach       = _GetAuidoChannel(Swap16(*(uint16_t *)ach_used));
-            sys_status->Mic_Info[i].slot      = (nwm_status.dev_data[15+i*16] >> 1) & 0x7;
-            myDebug("i=%d, slot=%d, ach=%d, device_id=0x%08x", i,
-                   sys_status->Mic_Info[i].slot, sys_status->Mic_Info[i].ach, sys_status->Mic_Info[i].device_id);
+            sys_status->mic_dev[i].device_id = swap32(*(uint32_t *)id);
+            sys_status->mic_dev[i].ach       = _auido_channel_get(swap16(*(uint16_t *)ach_used));
+            sys_status->mic_dev[i].slot      = (nwm_status.dev_data[15+i*16] >> 1) & 0x7;
+            myDebug("i=%d, slot=%d, ach=0x%04x, device_id=0x%08x", i,
+                   sys_status->mic_dev[i].slot, swap16(*(uint16_t *)ach_used), sys_status->mic_dev[i].device_id);
         }
     }
     if(updata_data_abnormal) {
@@ -878,16 +917,16 @@ static int _Updata_NetConfig(VOCAL_SYS_STATUS_S *sys_status)
         SYS_CON_ASSERT(ehif_NWM_CONTROL_ENABLE(1), sys_status);
     }
     else {
-        SYS_CON_ASSERT(_Rom_Record_Sync(sys_status), sys_status);
-        SYS_CON_ASSERT(_Volume_Updata(sys_status), sys_status);
-        sys_status->Status_Updata = 1;
+        SYS_CON_ASSERT(_rom_record_sync(sys_status), sys_status);
+        SYS_CON_ASSERT(_volume_all_set(sys_status), sys_status);
+        sys_status->sys_updata = 1;
         SYS_CON_ASSERT(ehif_EHC_EVT_CLR(1<<1), sys_status);
     }
 
     return E_SUCCESS;
 }
 
-static int _Remote_Control(MIC_DEVINFO_S *mic)
+static int _mic_rc_cmd(MIC_DEVINFO_S *mic)
 {
     switch(mic->cmd) {
     case OUTPUT_VOLUME_INCREMENT:
@@ -906,13 +945,13 @@ static int _Remote_Control(MIC_DEVINFO_S *mic)
         myDebug("volume mute=%d", mic->mute);
         break;
     }
-    _Rom_Record_Alone(mic);
-    _Volume_Set_Alone(mic);
+    _rom_record_write(mic, SIT_MIC_SLOT);
+    _volume_mic_set(mic);
 
     return E_SUCCESS;
 }
 
-static int _mic_rc_cmd_process(VOCAL_SYS_STATUS_S *sys_status)
+static int _rc_cmd_process(VOCAL_SYS_STATUS_S *sys_status)
 {
     uint8_t rc_data[12] = {0};
     uint8_t rc_count;
@@ -922,15 +961,15 @@ static int _mic_rc_cmd_process(VOCAL_SYS_STATUS_S *sys_status)
     static int times = 0;
 
     for(i = 0; i < MIC_MAX_NUM; i++) {
-        if(sys_status->Mic_Info[i].device_id) {
-            SYS_CON_ASSERT(ehif_RC_GET_DATA(sys_status->Mic_Info[i].slot, rc_data, &rc_count), sys_status);
+        if(sys_status->mic_dev[i].device_id) {
+            SYS_CON_ASSERT(ehif_RC_GET_DATA(sys_status->mic_dev[i].slot, rc_data, &rc_count), sys_status);
 
             if(rc_count) {
                 if(!cnt_record[i] || cmd_record[i] != rc_data[0]) {
                     myDebug("[%d]cmd=%d", times, rc_data[0]);
-                    sys_status->Mic_Info[i].cmd = rc_data[0];
-                    _Remote_Control(&sys_status->Mic_Info[i]);
-                    sys_status->Status_Updata = 1;
+                    sys_status->mic_dev[i].cmd = rc_data[0];
+                    _mic_rc_cmd(&sys_status->mic_dev[i]);
+                    sys_status->sys_updata = 1;
                 }
                 times++;
             }
@@ -942,24 +981,45 @@ static int _mic_rc_cmd_process(VOCAL_SYS_STATUS_S *sys_status)
     return E_SUCCESS;
 }
 
-void Try_To_close_Net(void)
+static int _ui_cmd_process(VOCAL_SYS_STATUS_S *sys_status)
+{
+    int i;
+
+    for(i = 0; i < MIC_MAX_NUM; i++) {
+        if(sys_status->mic_dev[i].device_id && sys_status->mic_dev[i].ui_cmd) {
+            SYS_CON_ASSERT(_rom_record_write(&sys_status->mic_dev[i], SIT_MIC_SLOT), sys_status);
+            SYS_CON_ASSERT(_volume_mic_set(&sys_status->mic_dev[i]), sys_status);
+            sys_status->mic_dev[i].ui_cmd = false;
+        }
+    }
+
+    if(sys_status->spk_dev.ui_cmd) {
+        SYS_CON_ASSERT(_rom_record_write(&sys_status->spk_dev, SIT_SPK_SLOT), sys_status);
+        SYS_CON_ASSERT(_volume_spk_set(&sys_status->spk_dev), sys_status);
+        sys_status->spk_dev.ui_cmd = false;
+    }
+
+    return E_SUCCESS;
+}
+
+void vocal_nwk_tryto_close(void)
 {
     ehif_NWM_CONTROL_ENABLE(0);
 }
 
 #define BIT_ISSET(a, s)     (((a) >> (s)) & 0x1)
-int Vocal_Sys_updata_Process(VOCAL_SYS_STATUS_S *sys_status)
+int vocal_working(VOCAL_SYS_STATUS_S *sys_status)
 {
     uint16_t            gpio_val = 0;
     static uint8_t      pairing_ctrl = 0;
 
     /* 1 updata sys_status */
-    if(!g_ehif_status.cmdreq_rdy || g_ehif_status.pwr_state > 5) {
-        SYS_CON_ASSERT(basic_GET_STATUS(&g_ehif_status), sys_status);
+    if(!gst_ehif_status.cmdreq_rdy || gst_ehif_status.pwr_state > 5) {
+        SYS_CON_ASSERT(basic_GET_STATUS(&gst_ehif_status), sys_status);
         return E_SUCCESS;
     }
 
-    if(!sys_status->Net_Enable) {   
+    if(!sys_status->nwk_enable) {   
     #if 0
         int i = 0;
         for(i = 0; i < 24; i++) {
@@ -969,19 +1029,21 @@ int Vocal_Sys_updata_Process(VOCAL_SYS_STATUS_S *sys_status)
         SYS_CON_ASSERT(ehif_NWM_CONTROL_ENABLE(0), sys_status);
         sleep(10);
         SYS_CON_ASSERT(ehif_NWM_CONTROL_ENABLE(1), sys_status);
-        sys_status->Net_Enable = 1;
+        sys_status->nwk_enable = 1;
     }
 
 
-    if(g_ehif_status.evt_nwk_chg) {
-        SYS_CON_ASSERT(_Updata_NetConfig(sys_status), sys_status);
+    if(gst_ehif_status.evt_nwk_chg) {
+        SYS_CON_ASSERT(_nwk_updata(sys_status), sys_status);
     }
-    SYS_CON_ASSERT(_mic_rc_cmd_process(sys_status), sys_status);
+
+    SYS_CON_ASSERT(_rc_cmd_process(sys_status), sys_status);
+    SYS_CON_ASSERT(_ui_cmd_process(sys_status), sys_status);
 
     SYS_CON_ASSERT(ehif_IO_GET_PIN_VAL(&gpio_val), sys_status); /* 28ms */
-    if(CheckButtonActive(&sPairingButton, BIT_ISSET(~gpio_val, 2))) {
-        sPairingButton.avtice = 0;
-        if(sPairingButton.status != BUTTON_FOCUSED) {
+    if(_check_button_active(&gst_button_pairing, BIT_ISSET(~gpio_val, 2))) {
+        gst_button_pairing.avtice = 0;
+        if(gst_button_pairing.status != BUTTON_FOCUSED) {
             myDebug("Paring");
             SYS_CON_ASSERT(ehif_NWM_CONTROL_SIGNAL(1), sys_status);
             pairing_ctrl = 1;

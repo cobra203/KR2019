@@ -18,6 +18,9 @@ Dialog::Dialog(QWidget *parent) :
     ui->verticalSlider_mic2->setMinimum(0);
     ui->verticalSlider_mic2->setMaximum(100);
 
+    ui->verticalSlider_speaker->setMinimum(0);
+    ui->verticalSlider_speaker->setMaximum(100);
+
     connect(&spiDaemon, SIGNAL(show_status(const QString&)),
             this, SLOT(show_status_resp(const QString&)));
 
@@ -34,9 +37,9 @@ Dialog::Dialog(QWidget *parent) :
             &spiDaemon, SLOT(mic_volume_change_resp(int)));
 
     connect(ui->verticalSlider_speaker, SIGNAL(valueChanged(int)),
-            this, SLOT(slider_speaker_valchange(int)));
+            &spiDaemon, SLOT(speaker_volume_change_resp(int)));
     connect(ui->checkBox_speaker, SIGNAL(stateChanged(int)),
-            this, SLOT(checkbox_speaker_statechange(int)));
+            &spiDaemon, SLOT(speaker_volume_change_resp(int)));
 
     spiDaemon.start();
 }
@@ -54,29 +57,18 @@ void Dialog::closeEvent(QCloseEvent *event)
     event->accept();
 }
 
-void Dialog::slider_speaker_valchange(int value)
-{
-    qDebug("speaker value=%d", value);
-}
-
-void Dialog::checkbox_speaker_statechange(int state)
-{
-    qDebug("speaker state=%d", state);
-}
-
-
 void Dialog::show_status_resp(const QString &status)
 {
     ui->label_status->setText(status);
     if(!QString::compare(status, "Disconnect")) {
         vocal_mic_enable(0, false, 0);
         vocal_mic_enable(1, false, 0);
-        vocal_speaker_enable(false);
+        vocal_spk_enable(false);
     }
     spiDaemon.semaphore.release();
 }
 
-void Dialog::vocal_speaker_enable(bool enable)
+void Dialog::vocal_spk_enable(bool enable)
 {
     ui->checkBox_speaker->setEnabled(enable);
     ui->verticalSlider_speaker->setEnabled(enable);
@@ -85,6 +77,14 @@ void Dialog::vocal_speaker_enable(bool enable)
         ui->verticalSlider_speaker->setValue(0);
     }
 }
+
+
+void Dialog::vocal_spk_volume(bool mute, int volume)
+{
+	ui->checkBox_speaker->setChecked(mute);
+    ui->verticalSlider_speaker->setValue(volume);
+}
+
 
 void Dialog::vocal_mic_enable(int id, bool enable, uint32_t device_id)
 {
@@ -103,9 +103,7 @@ void Dialog::vocal_mic_enable(int id, bool enable, uint32_t device_id)
         break;
     case 1:
         ui->checkBox_mic2->setWhatsThis(QString::number(device_id));
-        ui->verticalSlider_mic2->setWhatsThis(QString::number(device_id));
-         qDebug("dev_id=%d, setWhatsThis=%s, res=%s",
-                device_id, QString::number((int)device_id).toStdString().data(), ui->verticalSlider_mic1->whatsThis().toStdString().data());
+        ui->verticalSlider_mic2->setWhatsThis(QString::number(device_id)); 
         ui->checkBox_mic2->setEnabled(enable);
         ui->verticalSlider_mic2->setEnabled(enable);
         if(!enable) {
@@ -201,10 +199,18 @@ void Dialog::mic_updata(MIC_DEVINFO_S mic_info[])
     }
 }
 
+#define CURVERSION_MIC_MAX_NUM  2
+void Dialog::spk_updata(MIC_DEVINFO_S *spk_dev)
+{
+	vocal_spk_volume(spk_dev->mute, spk_dev->volume);
+}
+
+
 void Dialog::vocal_updata_resp(QVariant dataVar) {
     VOCAL_SYS_STATUS_S  sys = dataVar.value<VOCAL_SYS_STATUS_S>();
 
-    mic_updata(sys.Mic_Info);
+    mic_updata(sys.mic_dev);
+    spk_updata(&sys.spk_dev);
 
     spiDaemon.semaphore.release();
 }
