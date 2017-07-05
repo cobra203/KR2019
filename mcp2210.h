@@ -30,6 +30,7 @@ typedef struct vocal_sys_status_s
 {
     uint8_t         spi_conn;
     uint8_t         nwk_enable;
+    uint8_t         nwk_stable;
     uint8_t         sys_updata;
     MIC_DEVINFO_S   mic_dev[MIC_MAX_NUM];
     MIC_DEVINFO_S   spk_dev;

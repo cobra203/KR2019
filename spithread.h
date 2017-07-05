@@ -17,7 +17,7 @@ public:
     void stop();
 
 signals:
-    void show_status(const QString &);
+    void vocal_connect(int);
     void vocal_updata(QVariant);
 
 private slots:

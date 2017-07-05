@@ -25,9 +25,7 @@ SpiThread::SpiThread() : semaphore(1)
 
 SpiThread::~SpiThread()
 {
-    //QVariant DataVar;
-    //DataVar.setValue(sys_status);
-    //qRegisterMetaType<QVariant>("QVariant");
+
 }
 
 void SpiThread::stop()
@@ -41,6 +39,10 @@ void SpiThread::mic_volume_change_resp(int data)
     QCheckBox   *checkbox = NULL;
     uint32_t    device_id = 0;
 
+    if(!sys_status.spi_conn) {
+        return;
+    }
+
     if(slider = dynamic_cast<QSlider*>(sender())) {
         device_id = slider->whatsThis().toUInt();
     }
@@ -52,11 +54,9 @@ void SpiThread::mic_volume_change_resp(int data)
         if(device_id && sys_status.mic_dev[i].device_id == device_id) {
             if(slider) {
                 sys_status.mic_dev[i].volume = data;
-                //qDebug("mic[%d]:id=0x%08x, volume=%d", i, device_id, data);
             }
             else if(checkbox) {
                 sys_status.mic_dev[i].mute   = data ? true : false;
-                //qDebug("mic[%d]:id=0x%08x, mute=%d", i, device_id, data);
             }
             sys_status.mic_dev[i].ui_cmd = true;
         }
@@ -68,12 +68,14 @@ void SpiThread::speaker_volume_change_resp(int data)
     QSlider     *slider = NULL;
     QCheckBox   *checkbox = NULL;
 
+    if(!sys_status.spi_conn) {
+        return;
+    }
+
     if(slider = dynamic_cast<QSlider*>(sender())) {
         sys_status.spk_dev.volume = data;
-        //qDebug("speaker, volume=%d", data);
     }
     else if(checkbox = dynamic_cast<QCheckBox*>(sender())) {
-        //qDebug("speaker, mute=%d", data);
         sys_status.spk_dev.mute = data ? true : false;;
     }
     sys_status.spk_dev.ui_cmd = true;
@@ -87,7 +89,7 @@ void SpiThread::run()
 
     QTime       time;
     QVariant    sigarg;
-    static int times = 0;
+    static int  times = 0;
     memset(&sys_status, 0, sizeof(sys_status));
 
     while(!stopped) {
@@ -96,8 +98,8 @@ void SpiThread::run()
                 STATUS_SET(THR_STA_MCP_FOUND);
             }
             else {
-                semaphore.acquire();
-                emit show_status(QString("Disconnect"));
+				semaphore.acquire();
+                emit vocal_connect(false);
                 QThread::currentThread()->msleep(500);
                 continue;
             }
@@ -107,7 +109,8 @@ void SpiThread::run()
             if(!mcp2210_open(0, cur_handle)) {
                 STATUS_SET(THR_STA_MCP_OPEN);
                 semaphore.acquire();
-                emit show_status(QString("Connect"));
+                emit vocal_connect(true);
+				sys_status.spi_conn = true;
             }
             else {
                 STATUS_CLR(THR_STA_MCP_FOUND);
@@ -118,6 +121,9 @@ void SpiThread::run()
 
         time.restart();
         result = vocal_working(&sys_status);
+        if(result) {
+            qDebug("ERR:result=%d", result);
+        }
         //qDebug("%d ms, %d", time.elapsed(), times++);
 
         if(!sys_status.spi_conn) {
@@ -133,7 +139,7 @@ void SpiThread::run()
             semaphore.acquire();
             emit vocal_updata(sigarg);
 
-            qDebug("%d ms", time.elapsed());
+            qDebug("updata %dms, times=%d", time.elapsed(), times++);
             sys_status.sys_updata = 0;
         }
     }

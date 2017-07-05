@@ -14,7 +14,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Dialog</string>
+   <string>Vocal Control</string>
   </property>
   <widget class="QLabel" name="label_status">
    <property name="geometry">

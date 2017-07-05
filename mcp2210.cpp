@@ -2,7 +2,7 @@
 #include <QString>
 #include <QThread>
 
-#define DEBUG_ENABLE
+#define DEBUG_ENABLE1
 
 #if defined(DEBUG_ENABLE)
     #define myDebug(fmt, ...) qDebug(fmt, ##__VA_ARGS__)
@@ -29,8 +29,6 @@ void DataDump(const char title[], const uchar data[], int len)
 #else
     #define myDebug(fmt, ...)
 #endif
-
-
 
 void sleep(int ms)
 {
@@ -893,8 +891,13 @@ static int _nwk_updata(VOCAL_SYS_STATUS_S *sys_status)
     uint8_t updata_data_abnormal = false;
 
     myDebug("updata dev info");
+
+    if(sys_status->nwk_stable) {
+        SYS_CON_ASSERT(ehif_EHC_EVT_CLR(1<<1), sys_status);
+        sys_status->nwk_stable = false;
+    }
     memset(sys_status->mic_dev, 0, sizeof(sys_status->mic_dev));
-    sleep(300);
+    sleep(100);
     SYS_CON_ASSERT(ehif_CMD_NVM_GET_STATUS(&nwm_status), sys_status);
     for(i = 0; i < MIC_MAX_NUM; i++) {
         id       = &nwm_status.dev_data[0 + i*16];
@@ -902,6 +905,7 @@ static int _nwk_updata(VOCAL_SYS_STATUS_S *sys_status)
         if(*(uint32_t *)id) {
             if(0 == *(uint16_t *)ach_used) {
                 updata_data_abnormal = true;
+                i = MIC_MAX_NUM;
                 continue;
             }
             sys_status->mic_dev[i].device_id = swap32(*(uint32_t *)id);
@@ -919,8 +923,8 @@ static int _nwk_updata(VOCAL_SYS_STATUS_S *sys_status)
     else {
         SYS_CON_ASSERT(_rom_record_sync(sys_status), sys_status);
         SYS_CON_ASSERT(_volume_all_set(sys_status), sys_status);
-        sys_status->sys_updata = 1;
-        SYS_CON_ASSERT(ehif_EHC_EVT_CLR(1<<1), sys_status);
+        sys_status->nwk_stable = true;
+        sys_status->sys_updata = true;
     }
 
     return E_SUCCESS;
@@ -1033,7 +1037,7 @@ int vocal_working(VOCAL_SYS_STATUS_S *sys_status)
     }
 
 
-    if(gst_ehif_status.evt_nwk_chg) {
+    if(!sys_status->nwk_stable || gst_ehif_status.evt_nwk_chg) {
         SYS_CON_ASSERT(_nwk_updata(sys_status), sys_status);
     }
 

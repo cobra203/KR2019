@@ -26,7 +26,7 @@ public:
     void closeEvent(QCloseEvent *event);
 
 private slots:
-    void show_status_resp(const QString&status);
+    void vocal_connect_resp(int);
     void vocal_updata_resp(QVariant);
 
 private:
