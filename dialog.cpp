@@ -5,6 +5,7 @@
 #include <QTextCodec>
 #include <QCloseEvent>
 #include <stdint.h>
+#include <QPushButton>
 
 Dialog::Dialog(QWidget *parent) :
     QDialog(parent),
@@ -46,6 +47,9 @@ Dialog::Dialog(QWidget *parent) :
             &spiDaemon, SLOT(speaker_volume_change_resp(int)));
     connect(ui->checkBox_speaker, SIGNAL(stateChanged(int)),
             &spiDaemon, SLOT(speaker_volume_change_resp(int)));
+
+    connect(ui->pushButton, SIGNAL(clicked(int)),
+            &spiDaemon, SLOT(mic_button_pairing_resp()));
 
     spiDaemon.start();
 }

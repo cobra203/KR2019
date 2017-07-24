@@ -81,6 +81,11 @@ void SpiThread::speaker_volume_change_resp(int data)
     sys_status.spk_dev.ui_cmd = true;
 }
 
+void SpiThread::mic_button_pairing_resp(void)
+{
+	sys_status.btn_pairing = true;
+}
+
 void SpiThread::run()
 {
     int     count       = 0;

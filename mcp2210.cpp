@@ -1054,6 +1054,15 @@ int vocal_working(VOCAL_SYS_STATUS_S *sys_status)
         }
     }
 
+	if(sys_status->btn_pairing) {
+		sys_status->btn_pairing = 0;
+		if(pairing_ctrl == 0) {
+			myDebug("Button Paring");
+            SYS_CON_ASSERT(ehif_NWM_CONTROL_SIGNAL(1), sys_status);
+            pairing_ctrl = 1;
+		}
+	}
+
     if(pairing_ctrl) {
         if(pairing_ctrl++ == 120) {
             SYS_CON_ASSERT(ehif_NWM_CONTROL_SIGNAL(0), sys_status);

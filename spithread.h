@@ -23,6 +23,7 @@ signals:
 private slots:
     void mic_volume_change_resp(int);
     void speaker_volume_change_resp(int);
+    void mic_button_pairing_resp(void);
 
 protected:
     void run();
